@@ -9,6 +9,7 @@
  *    - 'acceptedAddressTypes' => 'work', 'home'
  *
  * @author Daniel Imhoff
+ * @contributor Guy Louzon
  */
 
 class vCardGenerator {
@@ -192,9 +193,12 @@ class vCardGenerator {
       );
    }
 
-   public function addUrl($type = null, $url) {
+   public function addUrl($url,$servicetype = null, $type = null) {
       if(!isset($type)) {
          $type = 'home';
+      }
+      if(!isset($servicetype)) {
+         $servicetype = 'url';
       }
       if($this->params['strict'] && !$this->isValidUrl($url)) {
          throw new Exception('url is not valid');
@@ -202,6 +206,7 @@ class vCardGenerator {
       $this->urls[] = array(
          'type' => strtoupper($type),
          'url' => $url,
+         'servicetype' => $servicetype,
       );
    }
    
@@ -249,7 +254,8 @@ class vCardGenerator {
       }
 
       foreach($this->urls as $url) {
-         $output .= 'EMAIL;TYPE=' . $url['type'] .',INTERNET:' . $url['url'] . "\r\n";
+         $stype = (isset($url['service'])) ? 'X-' . strtoupper($url['service']) : 'URL';
+         $output .=  $stype . ';TYPE=' . $url['type'] .',INTERNET:' . $url['url'] . "\r\n";
       }
 
      // $output .= 'EMAIL;TYPE=PREF,INTERNET:' . $this->emailAddress . "\r\n"
