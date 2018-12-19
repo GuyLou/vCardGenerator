@@ -28,6 +28,8 @@ class vCardGenerator {
 
    private $phoneNumbers = array();
    private $addresses = array();
+   private $emails = array();
+   private $urls = array();
 
    private $emailAddress;
 
@@ -176,6 +178,34 @@ class vCardGenerator {
     *
     * @param string $emailAddress The email address.
     */
+   
+   public function addEmail($type, $email) {
+      if(!isset($type)) {
+         $type = 'home';
+      }
+      if($this->params['strict'] && !$this->isValidEmailAddress($email)) {
+         throw new Exception('email is not valid');
+      }
+      $this->emails[] = array(
+         'type' => strtoupper($type),
+         'email' => $email,
+      );
+   }
+
+   public function addUrl($type = null, $url) {
+      if(!isset($type)) {
+         $type = 'home';
+      }
+      if($this->params['strict'] && !$this->isValidUrl($url)) {
+         throw new Exception('url is not valid');
+      }
+      $this->urls[] = array(
+         'type' => strtoupper($type),
+         'url' => $url,
+      );
+   }
+   
+   // depricated - to be removed
    public function setEmailAddress($emailAddress) {
       if($this->params['strict'] && !$this->isValidEmailAddress($emailAddress)) {
          throw new Exception('Email address is not valid.');
@@ -214,8 +244,16 @@ class vCardGenerator {
                   . 'LABEL;TYPE=' . $address['type'] . ':' . rtrim(str_replace("\n", '\n', $address['address']), '\n') . "\r\n";
       }
 
-      $output .= 'EMAIL;TYPE=PREF,INTERNET:' . $this->emailAddress . "\r\n"
-               . 'REV:' . $this->formatTime(isset($this->lastRevision) ? $this->lastRevision : time()) . "\r\n"
+      foreach($this->emails as $email) {
+         $output .= 'EMAIL;TYPE=' . $phoneNumber['type'] .',INTERNET:' . $email['email'] . "\r\n";
+      }
+
+      foreach($this->urls as $url) {
+         $output .= 'EMAIL;TYPE=' . $url['type'] .',INTERNET:' . $url['url'] . "\r\n";
+      }
+
+     // $output .= 'EMAIL;TYPE=PREF,INTERNET:' . $this->emailAddress . "\r\n"
+       $output .= 'REV:' . $this->formatTime(isset($this->lastRevision) ? $this->lastRevision : time()) . "\r\n"
                . 'END:VCARD' . "\r\n";
 
       return $output;
