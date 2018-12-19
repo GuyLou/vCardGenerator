@@ -341,4 +341,14 @@ class vCardGenerator {
    private function isValidEmailAddress($emailAddress) {
       return false !== filter_var(trim($emailAddress), FILTER_VALIDATE_EMAIL);
    }
+
+   /**
+    * This function will validate a url.
+    *
+    * @param string $url The url to validate.
+    * @return true if the url is valid, false otherwise.
+    */
+   private function isValidUrl($url) {
+      return false !== filter_var(trim($url), FILTER_VALIDATE_URL);
+   }
 }
