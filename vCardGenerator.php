@@ -26,13 +26,15 @@ class vCardGenerator {
 
    private $organization;
    private $title;
-
+  
    private $phoneNumbers = array();
    private $addresses = array();
    private $emails = array();
    private $urls = array();
+   private $image = array();
 
    private $emailAddress;
+  
 
    private $lastRevision;
 
@@ -132,6 +134,13 @@ class vCardGenerator {
       $this->title = $title;
    }
 
+   public function setImage($image_url, $image_type) {
+      $getImage = base64_encode(file_get_contents($image_url));
+      $getImage = wordwrap($getImage,72, "\r\n ", true);
+      $this->image['base64'] = $getImage;
+      $this->image['type'] = $image_type;
+   }
+   
    /**
     * This function will add a phone number to the vCard.
     *
@@ -238,7 +247,9 @@ class vCardGenerator {
               . 'N:' . $this->formatName() . "\r\n"
               . 'FN:' . $this->fullName . "\r\n"
               . 'ORG:' . $this->organization . "\r\n"
-              . 'TITLE:' . $this->title . "\r\n";
+              . 'TITLE:' . $this->title . "\r\n"
+              . 'PHOTO;TYPE=' . $this->image['type'] .';ENCODING=BASE64:' . "\r\n " . $this->image['base64'] . "\r\n\r\n"; // here we need two line feeds
+
 
       foreach($this->phoneNumbers as $phoneNumber) {
          $output .= 'TEL;TYPE=' . $phoneNumber['type'] . ',VOICE:' . $phoneNumber['number'] . "\r\n";
