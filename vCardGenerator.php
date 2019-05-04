@@ -11,19 +11,21 @@
  * @author Daniel Imhoff
  * @contributor Guy Louzon
  */
-
 class vCardGenerator {
    private $params = array(
       'strict' => false,
       'acceptedPhoneNumberTypes' => array('work', 'home', 'mobile'),
       'acceptedAddressTypes' => array('work', 'home'),
+      'validItemTypes' => array('phone', 'email','address','url'),
+      'serviceTypes' => array('phone' => 'TEL', 'email' => 'EMAIL','address' => 'ADR','url' => 'URL', 'site' => 'URL'),
+      'validate' => array('url' => 'isValidUrl','email' => 'isValidEmailAddress','phone' => 'dummy','address' => 'dummy'),
+      'format' => array('url' => 'dummymirror','email' => 'dummymirror','phone' => 'formatPhoneNumber','address' => 'formatAddress'),
+      'secondary' => array('url' => 'INTERNET','email' => 'INTERNET','phone' => 'VOICE','address' => ''),
    );
-
    private $fullName;   // setFullName() is provided for convenience, but if any of the below are set,
    private $firstName;  // they will all be used to construct a full name. It is best to use
    private $middleName; // setFullName() by itself, or use the setFirstName(), setMiddleName(), and
    private $lastName;   // setLastName() functions by themselves.
-
    private $organization;
    private $title;
   
@@ -32,12 +34,9 @@ class vCardGenerator {
    private $emails = array();
    private $urls = array();
    private $image = array();
-
    private $emailAddress;
-  
-
+   private $items = array();
    private $lastRevision;
-
    /**
     * The constructor can accept parameters for the class.
     *
@@ -48,7 +47,6 @@ class vCardGenerator {
          $this->setParams($params);
       }
    }
-
    /**
     * When attempted to convert this object to a string, this function will generate and return the vCard.
     */
@@ -60,7 +58,6 @@ class vCardGenerator {
          return $e->getMessage();
       }
    }
-
    /**
     * This function will add/overwrite the parameters of the class.
     *
@@ -69,7 +66,6 @@ class vCardGenerator {
    public function setParams(array $params) {
       $this->params += $params;
    }
-
    /**
     * This function will add/overwrite a parameter of the class.
     *
@@ -79,7 +75,6 @@ class vCardGenerator {
    public function setParam($key, $value) {
       $this->params[$key] = $value;
    }
-
    /**
     * This function will set the first name of the person this vCard represents.
     *
@@ -88,7 +83,6 @@ class vCardGenerator {
    public function setFirstName($name) {
       $this->firstName = $name;
    }
-
    /**
     * This function will set the middle name of the person this vCard represents.
     *
@@ -97,7 +91,6 @@ class vCardGenerator {
    public function setMiddleName($name) {
       $this->middleName = $name;
    }
-
    /**
     * This function will set the last name of the person this vCard represents.
     *
@@ -106,7 +99,6 @@ class vCardGenerator {
    public function setLastName($name) {
       $this->lastName = $name;
    }
-
    /**
     * This function will set the full name of the person this vCard represents.
     *
@@ -115,7 +107,6 @@ class vCardGenerator {
    public function setFullName($name) {
       $this->fullName = $name;
    }
-
    /**
     * This function will set the organization of the person this vCard represents.
     *
@@ -124,7 +115,6 @@ class vCardGenerator {
    public function setOrganization($organization) {
       $this->organization = $organization;
    }
-
    /**
     * This function will set the title of the person this vCard represents.
     *
@@ -133,12 +123,21 @@ class vCardGenerator {
    public function setTitle($title) {
       $this->title = $title;
    }
-
-   public function setImage($image_url, $image_type) {
+   
+   public function setImage($image_url, $image_type) { // base 64
       $getImage = base64_encode(file_get_contents($image_url));
       $getImage = wordwrap($getImage,72, "\r\n ", true);
       $this->image['base64'] = $getImage;
       $this->image['type'] = $image_type;
+      unset($this->image['url']);
+   }
+   
+   public function setImageUrl($image_url, $image_type) {
+        if ($this->isValidUrl($image_url)) {
+            $this->image['type'] = $image_type;
+            $this->image['url'] = $image_url;
+            unset($this->image['base64']);
+        }
    }
    
    /**
@@ -147,21 +146,18 @@ class vCardGenerator {
     * @param string $type The type of phone number. ex: work, home, mobile (default: home if null is passed)
     * @param mixed $phoneNumber The phone number itself.
     */
-   public function addPhoneNumber($type, $phoneNumber = null) {
+   public function addPhoneNumber($type, $phoneNumber) {
       if(!isset($type)) {
          $type = 'home';
       }
-
       if($this->params['strict'] && !in_array($type, $this->params['acceptedPhoneNumberTypes'])) {
          throw new Exception('Phone number type not allowed.');
       }
-
       $this->phoneNumbers[] = array(
          'type' => strtoupper($type),
          'number' => $this->formatPhoneNumber($phoneNumber),
       );
    }
-
    /**
     * This function will add a street address to the vCard.
     *
@@ -172,17 +168,14 @@ class vCardGenerator {
       if(!isset($type)) {
          $type = 'home';
       }
-
       if($this->params['strict'] && !in_array($type, $this->params['acceptedAddressTypes'])) {
          throw new Exception('Address type not allowed.');
       }
-
       $this->addresses[] = array(
          'type' => strtoupper($type),
          'address' => $address, // No formatting done for street address.. x.x
       );
    }
-
    /**
     * This function will set the email address of the vCard.
     *
@@ -201,7 +194,6 @@ class vCardGenerator {
          'email' => $email,
       );
    }
-
    public function addUrl($url,$servicetype = null, $type = null) {
       if(!isset($type)) {
          $type = 'home';
@@ -219,15 +211,46 @@ class vCardGenerator {
       );
    }
    
+   public function addItem($parameters) {
+   	if(!in_array($parameters['itemtype'],$this->params['validItemTypes'])) {
+   		throw new Exception('no such item type'); // item types: phone, email, url, address
+   	}
+   	$dynamicfuncion = $this->params['validate'][$parameters['itemtype']];
+   	if(!$this->$dynamicfuncion($parameters['value'])) {
+ 		throw new Exception('value is invalid');
+   	}
+   	
+   	if (!isset($parameters['servicetype'])) {
+   		$servicetype = $this->params['serviceTypes'][$parameters['itemtype']];
+   	 } else {
+   	 	if (in_array($parameters['servicetype'],array_keys($this->params['serviceTypes'])) && $this->params['serviceTypes'][$parameters['servicetype']] != '') {
+   	 		$servicetype = $this->params['serviceTypes'][$parameters['servicetype']];
+   	 	} else {
+   	 		// $servicetype = 'X-' . strtoupper($parameters['servicetype']) ; // twitter, facebook, etc. VCard 4 level
+   	 		$servicetype = 'URL'; // VCard 3 defaults
+   	 	}
+   	 	//$servicetype = (in_array($parameters['servicetype'],array_keys($this->params['serviceTypes'])) ? '' : 'X-') . strtoupper($parameters['servicetype']) ; // twitter, facebook, etc.
+   	 }
+   	 $dynamicfuncion = $this->params['format'][$parameters['itemtype']];
+   	 $parameters['value'] = $this->$dynamicfuncion($parameters['value']);
+
+   	$this->items[] = array(
+	 'itemtype' => strtoupper($parameters['itemtype']),   	
+         'type' => strtoupper($parameters['type']),
+         'value' => $parameters['value'],
+         'servicetype' => $servicetype,
+         'secondary' => $this->params['secondary'][$parameters['itemtype']],
+   	);
+   	
+   }
+   
    // depricated - to be removed
    public function setEmailAddress($emailAddress) {
       if($this->params['strict'] && !$this->isValidEmailAddress($emailAddress)) {
          throw new Exception('Email address is not valid.');
       }
-
       $this->emailAddress= $emailAddress;
    }
-
    /**
     * Set the last revision to this vCard. If not set, the generator will default the last revision to
     * the current second.
@@ -235,7 +258,6 @@ class vCardGenerator {
    public function setLastRevision($time) {
       $this->lastRevision = $time;
    }
-
    /**
     * This builds the vCard and returns it in string format.
     *
@@ -247,44 +269,46 @@ class vCardGenerator {
               . 'N:' . $this->formatName() . "\r\n"
               . 'FN:' . $this->fullName . "\r\n"
               . 'ORG:' . $this->organization . "\r\n"
-              . 'TITLE:' . $this->title . "\r\n"
-              . 'PHOTO;TYPE=' . $this->image['type'] .';ENCODING=BASE64:' . "\r\n " . $this->image['base64'] . "\r\n\r\n"; // here we need two line feeds
-
-
+              . 'TITLE:' . $this->title . "\r\n";
+              //  // PHOTO;VALUE=URI;TYPE=GIF:http://www.example.com/dir_photos/my_photo.gif
+      if (isset($this->image['type'])) {
+          if (isset($this->image['base64']) && ($this->image['base64'] != '')) {
+            $output .= 'PHOTO;TYPE=' . $this->image['type'] .';ENCODING=BASE64:' . "\r\n " . $this->image['base64'] . "\r\n\r\n"; // here we need two line feeds
+          } elseif ($this->image['url']) {
+            $output .= "PHOTO;VALUE=URI;TYPE=" . $this->image['type'] . ":" . $this->image['url'] . "\r\n";
+          }
+      }
+      
       foreach($this->phoneNumbers as $phoneNumber) {
          $output .= 'TEL;TYPE=' . $phoneNumber['type'] . ',VOICE:' . $phoneNumber['number'] . "\r\n";
       }
-
       foreach($this->addresses as $address) {
-         $output .= 'ADR;TYPE=' . $address['type'] . ':;;' . $this->formatAddress($address['address']) . "\r\n"
+         $output .= 'ADR;TYPE=' . $address['type'] . ':' . $this->formatAddress($address['address']) . "\r\n"
                   . 'LABEL;TYPE=' . $address['type'] . ':' . rtrim(str_replace("\n", '\n', $address['address']), '\n') . "\r\n";
       }
-
       foreach($this->emails as $email) {
          $output .= 'EMAIL;TYPE=' . $phoneNumber['type'] .',INTERNET:' . $email['email'] . "\r\n";
       }
 
+      foreach($this->items as $item) {
+         $output .= $item['servicetype'] . ';TYPE=' . $item['type'] .','. $item['secondary'] . ':' . $item['value'] . "\r\n";
+      }
       foreach($this->urls as $url) {
          $stype = (isset($url['service'])) ? 'X-' . strtoupper($url['service']) : 'URL';
          $output .=  $stype . ';TYPE=' . $url['type'] .',INTERNET:' . $url['url'] . "\r\n";
       }
-
      // $output .= 'EMAIL;TYPE=PREF,INTERNET:' . $this->emailAddress . "\r\n"
        $output .= 'REV:' . $this->formatTime(isset($this->lastRevision) ? $this->lastRevision : time()) . "\r\n"
                . 'END:VCARD' . "\r\n";
-
       return $output;
    }
-
    /**
     * This function is necessary when first, middle and last names are not specifically set. It attempts to determine
     * them from the given full name.
     */
    private function parseFullName() {
       $ary = explode(' ', $this->fullName);
-
       $this->firstName = array_shift($ary);
-
       switch(sizeof($ary)) {
          case 1:
             $this->lastName = array_shift($ary);
@@ -295,16 +319,13 @@ class vCardGenerator {
             break;
          default:
             $this->middleName = array_shift($ary);
-
             foreach($ary as $name) {
                $this->lastName .= $name . ' ';
             }
-
             rtrim($this->lastName);
             break;
       }
    }
-
    /**
     * This function formats a name for the N: field in vCard.
     *
@@ -317,10 +338,8 @@ class vCardGenerator {
       else {
          $this->fullName = $this->firstName . ' ' . $this->middleName . ' ' . $this->lastName;
       }
-
-      return $this->lastName . ';' . $this->firstName . (isset($this->middleName) ? ';' . $this->middleName : '');
+      return $this->lastName . ';' . $this->firstName . (isset($this->middleName) ? ';' . $this->middleName : '') . ';';
    }
-
    /**
     * This function formats a phone number into valid vCard format. Phone numbers can be given in any format, and the
     * function will try it's best to return a phone number in valid vCard format depending on the strict parameter.
@@ -330,26 +349,20 @@ class vCardGenerator {
     */
    private function formatPhoneNumber($phoneNumber) {
       $phoneNumber = preg_replace('/[^0-9]/', '', (string) $phoneNumber);
-
       switch(strlen($phoneNumber)) {
          case 7:
             return preg_replace('/([0-9]{3})([0-9]{4})/', '$1-$2', $phoneNumber);
-
          case 10:
             return preg_replace('/([0-9]{3})([0-9]{3})([0-9]{4})/', '($1) $2-$3', $phoneNumber);
-
          case 11:
             return preg_replace('/([0-9]{1})([0-9]{3})([0-9]{3})([0-9]{4})/', '$1 ($2) $3-$4', $phoneNumber);
-
          default:
             if($this->params['strict']) {
                throw new Exception('Phone number is of an invalid length. Phone numbers must be 7, 10, or 11 characters long.');
             }
-
             return $phoneNumber;
       }
    }
-
    /**
     * This function formats an address into valid vCard format for ADR:
     *
@@ -357,22 +370,16 @@ class vCardGenerator {
     */
    private function formatAddress($address) {
       $lines = preg_split('/\\\n|\\n/', trim($address));
-
       $secondLine = explode(' ', str_replace(',', ' ', $lines[1]));
-
       $zip = array_pop($secondLine);
       $state = array_pop($secondLine);
       $city = '';
-
       foreach($secondLine as $cityPart) {
          $city .= $cityPart . ' ';
       }
-
       $lines[1] = rtrim($city) . ';' . $state . ';' . $zip;
-
       return implode(';', $lines);
    }
-
    /**
     * This function will format a time and date into the correct vCard format for revision time.
     *
@@ -383,10 +390,8 @@ class vCardGenerator {
       if((string) (int) $time != $time && false === $time = strtotime($time)) {
          throw new Exception('strtotime() could not convert your time to a valid timestamp.');
       }
-
       return date('Y-m-d\TH:i:s\Z', $time);
    }
-
    /**
     * This function will validate an email address.
     *
@@ -396,7 +401,6 @@ class vCardGenerator {
    private function isValidEmailAddress($emailAddress) {
       return false !== filter_var(trim($emailAddress), FILTER_VALIDATE_EMAIL);
    }
-
    /**
     * This function will validate a url.
     *
@@ -405,5 +409,13 @@ class vCardGenerator {
     */
    private function isValidUrl($url) {
       return false !== filter_var(trim($url), FILTER_VALIDATE_URL);
+   }
+   
+   private function dummy($param = null) {
+   	return true;
+   }
+
+   private function dummymirror($param = null) {
+   	return $param;
    }
 }
